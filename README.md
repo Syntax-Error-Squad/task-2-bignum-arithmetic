@@ -11,8 +11,8 @@ ____
 ____
 ### 1. Клонируйте репозиторий
 ```bash
-git clone https://github.com/Syntax-Error-Squad/bignum-arithmetic.git
-cd bignum-arithmetic
+git clone https://github.com/Syntax-Error-Squad/task-2-bignum-arithmetic.git
+cd task-2-bignum-arithmetic
 ```
 ### 2. Создайте виртуальное окружение
 ```bash
