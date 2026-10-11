@@ -44,7 +44,7 @@ def from_string(number):
     if not number:
         raise ValueError("Пустое число")
 
-    if not number.isdigit():
+    if not all(char in "0123456789" for char in number):
         raise ValueError(f"Недопустимое число: {number}")
 
     number = number.lstrip("0") 
@@ -331,11 +331,6 @@ def multiply(sign_a, a, sign_b, b):
         result[i] %= M
         result[i - 1] += carry
 
-    while result[0] >= M:
-        carry = result[0] // M
-        result[0] %= M
-        result.insert(0, carry)
-
     while len(result) > 1 and result[0] == 0:
         result.pop(0)
 
@@ -345,10 +340,41 @@ def multiply(sign_a, a, sign_b, b):
     return sign_a * sign_b, result
 
 
-def divide(sign_a, a, sign_b, b):
-    """Делит одно длинное число на другое нацело (деление в столбик).
+def find_digit(b, remainder):
+    """Подбирает цифру частного двоичным поиском.
 
-    Частное округляется к нулю: -7 / 2 дает -3.
+    Parameters
+    ----------
+    b : list of int
+        Разряды делителя.
+    remainder : list of int
+        Разряды текущего остатка.
+
+    Returns
+    -------
+    int
+        Наибольшее q из [0, M), при котором |b| * q <= |remainder|.
+    """
+    low, high = 0, M - 1
+    while low < high:
+        mid = (low + high + 1) // 2
+        try:
+            product = multiply(1, b, 1, [mid])[1]
+        except OverflowError:
+            high = mid - 1
+            continue
+        if compare_abs(product, remainder) <= 0:
+            low = mid
+        else:
+            high = mid - 1
+    return low
+
+
+def divide(sign_a, a, sign_b, b):
+    """Делит одно длинное число на другое с остатком (деление в столбик).
+
+    Частное округляется к нулю, остаток имеет знак делимого,
+    так что a = q * b + r: -7 / 2 дает частное -3 и остаток -1.
 
     Parameters
     ----------
@@ -363,10 +389,14 @@ def divide(sign_a, a, sign_b, b):
 
     Returns
     -------
-    sign : int
+    sign_q : int
         Знак частного.
-    digits : list of int
+    quotient : list of int
         Разряды модуля частного.
+    sign_r : int
+        Знак остатка. Для нуля всегда 1.
+    remainder : list of int
+        Разряды модуля остатка.
 
     Raises
     ------
@@ -377,7 +407,7 @@ def divide(sign_a, a, sign_b, b):
         raise ZeroDivisionError("Деление на ноль")
 
     if compare_abs(a, b) < 0:
-        return 1, [0]
+        return 1, [0], sign_a, a[:]
 
     quotient = []
     remainder = [0]
@@ -391,18 +421,7 @@ def divide(sign_a, a, sign_b, b):
         while len(remainder) > 1 and remainder[0] == 0:
             remainder.pop(0)
 
-        q = 0
-        for candidate in range(M):
-            try:
-                product = multiply(1, b, 1, [candidate])[1]
-            except OverflowError:
-                break
-
-            if compare_abs(product, remainder) <= 0:
-                q = candidate
-            else:
-                break
-
+        q = find_digit(b, remainder)
         quotient.append(q)
 
         if q != 0:
@@ -412,14 +431,15 @@ def divide(sign_a, a, sign_b, b):
     while len(quotient) > 1 and quotient[0] == 0:
         quotient.pop(0)
 
-    return sign_a * sign_b, quotient
+    sign_r = sign_a if remainder != [0] else 1
+    return sign_a * sign_b, quotient, sign_r, remainder
 
 
 def main():
     """Запускает интерактивную демонстрацию длинной арифметики.
 
     В цикле запрашивает два числа и выводит результаты сложения,
-    вычитания, умножения и целочисленного деления. Ввод q завершает
+    вычитания, умножения, целочисленного деления и остатка. Ввод q завершает
     программу.
 
     Returns
@@ -459,34 +479,24 @@ def main():
         print("Второе число:", str_b)
         print()
 
-        # Сложение
-        try:
-            sign_r, result = add(sign_a, a, sign_b, b)
-            print(f"{str_a} + {str_b} = {to_string(sign_r, result)}")
-        except OverflowError as error:
-            print(f"Сложение: ошибка — {error}")
-
-        # Вычитание
-        try:
-            sign_r, result = subtract(sign_a, a, sign_b, b)
-            print(f"{str_a} - {str_b} = {to_string(sign_r, result)}")
-        except OverflowError as error:
-            print(f"Вычитание: ошибка — {error}")
-
-        # Умножение
-        try:
-            sign_r, result = multiply(sign_a, a, sign_b, b)
-            print(f"{str_a} * {str_b} = {to_string(sign_r, result)}")
-        except OverflowError as error:
-            print(f"Умножение: ошибка — {error}")
+        operations = (
+            ("+", "Сложение", add),
+            ("-", "Вычитание", subtract),
+            ("*", "Умножение", multiply),
+        )
+        for symbol, name, operation in operations:
+            try:
+                sign_r, result = operation(sign_a, a, sign_b, b)
+                print(f"{str_a} {symbol} {str_b} = {to_string(sign_r, result)}")
+            except OverflowError as error:
+                print(f"{name}: ошибка — {error}")
 
         # Деление
         try:
-            sign_r, result = divide(sign_a, a, sign_b, b)
-            print(f"{str_a} // {str_b} = {to_string(sign_r, result)}")
+            sign_q, quotient, sign_r, remainder = divide(sign_a, a, sign_b, b)
+            print(f"{str_a} // {str_b} = {to_string(sign_q, quotient)}")
+            print(f"{str_a} % {str_b} = {to_string(sign_r, remainder)}")
         except ZeroDivisionError as error:
-            print(f"Деление: ошибка — {error}")
-        except OverflowError as error:
             print(f"Деление: ошибка — {error}")
 
 
